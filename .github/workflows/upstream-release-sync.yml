@@ -1,13 +1,13 @@
-name: Nightly upstream sync & image build
+name: Upstream release sync & image build
 
-# Merges the latest official main into this private repo every night
-# (02:17 Beijing time), then builds and pushes a private image to GHCR.
+# Checks the official repo every hour. When a new release tag appears, it is
+# merged into main here, then a private image is built and pushed to GHCR.
 # A merge conflict fails the run and GitHub emails the repo owner;
 # nothing is pushed or built in that case.
 
 on:
   schedule:
-    - cron: '17 18 * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
       force_build:
@@ -17,7 +17,7 @@ on:
         type: boolean
 
 concurrency:
-  group: nightly-upstream-sync
+  group: upstream-release-sync
   cancel-in-progress: false
 
 env:
@@ -26,13 +26,14 @@ env:
 
 jobs:
   sync:
-    name: Merge upstream main
+    name: Merge latest upstream release
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
       changed: ${{ steps.merge.outputs.changed }}
       sha: ${{ steps.merge.outputs.sha }}
+      tag: ${{ steps.merge.outputs.tag }}
     steps:
       # Pushing upstream changes to .github/workflows is refused for GITHUB_TOKEN,
       # so the push goes through a write deploy key scoped to this repo only.
@@ -43,21 +44,31 @@ jobs:
           fetch-depth: 0
           ssh-key: ${{ secrets.SYNC_DEPLOY_KEY }}
 
-      - name: Merge upstream main
+      - name: Merge latest upstream release
         id: merge
         run: |
           git config user.name "nightly-sync"
           git config user.email "nightly-sync@users.noreply.github.com"
           git remote add upstream "$UPSTREAM_URL"
-          git fetch --no-tags upstream main
 
-          if git merge-base --is-ancestor upstream/main HEAD; then
-            echo "Already up to date with upstream."
+          # versionsort.suffix makes v1.0.0 sort above v1.0.0-rc.N.
+          TAG=$(git -c versionsort.suffix=- ls-remote --tags --refs --sort=-v:refname upstream 'v*' \
+            | head -1 | sed 's#.*refs/tags/##')
+          if [ -z "$TAG" ]; then
+            echo "::error::No upstream release tag found"
+            exit 1
+          fi
+          echo "Latest upstream release: $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          git fetch --no-tags upstream "refs/tags/$TAG:refs/tags/$TAG"
+
+          if git merge-base --is-ancestor "$TAG" HEAD; then
+            echo "Already contains $TAG."
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "New upstream commits:"
-            git log --oneline HEAD..upstream/main | head -50
-            if ! git merge --no-edit upstream/main; then
+            git log --oneline "HEAD..$TAG" | head -50
+            if ! git merge --no-edit -m "Merge upstream release $TAG" "$TAG"; then
               echo "::error::Merge conflict with upstream. Resolve it locally and push; nothing was deployed."
               git diff --name-only --diff-filter=U
               exit 1
@@ -85,7 +96,7 @@ jobs:
       - name: Resolve version
         id: version
         run: |
-          VERSION="custom-$(date -u +'%Y%m%d')-$(git rev-parse --short HEAD)"
+          VERSION="${{ needs.sync.outputs.tag }}-custom-$(git rev-parse --short HEAD)"
           echo "$VERSION" > VERSION
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
