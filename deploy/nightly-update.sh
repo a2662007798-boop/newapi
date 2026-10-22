@@ -7,22 +7,19 @@
 # 3. Preflight: start the new image on a copy of that backup in an isolated
 #    container (no network). The production database is not touched; if the
 #    copy does not come up healthy, stop here.
-# 4. Run the existing off-site backup script (if present); abort on failure.
-# 5. Stop the service, copy the SQLite files aside, start on the new image.
-# 6. If /api/status does not report success in time, move the migrated files
+# 4. Stop the service, copy the SQLite files aside, start on the new image.
+# 5. If /api/status does not report success in time, move the migrated files
 #    aside, put the copied database back, retag the previous image, start.
 #
 # Usage: nightly-update.sh [compose dir]   (default /opt/new-api)
 # Env:   SERVICE (default new-api), BACKUP_DIR (default <compose dir>/backups),
-#        KEEP_DAYS (default 7), PRE_BACKUP (default /root/scripts/backup-to-tencent.sh),
-#        HEALTH_TIMEOUT seconds (default 900)
+#        KEEP_DAYS (default 7), HEALTH_TIMEOUT seconds (default 900)
 set -euo pipefail
 
 COMPOSE_DIR=${1:-/opt/new-api}
 SERVICE=${SERVICE:-new-api}
 BACKUP_DIR=${BACKUP_DIR:-$COMPOSE_DIR/backups}
 KEEP_DAYS=${KEEP_DAYS:-7}
-PRE_BACKUP=${PRE_BACKUP:-/root/scripts/backup-to-tencent.sh}
 HEALTH_TIMEOUT=${HEALTH_TIMEOUT:-900}
 DB_FILES=(one-api.db one-api.db-wal one-api.db-shm)
 PREFLIGHT=newapi-preflight
@@ -131,14 +128,6 @@ fi
 log "preflight passed in $((SECONDS - started))s (expected downtime is about this long)"
 docker rm -f "$PREFLIGHT" >/dev/null
 rm -rf "$WORK"
-
-if [ -x "$PRE_BACKUP" ]; then
-  log "running off-site backup $PRE_BACKUP"
-  if ! "$PRE_BACKUP"; then
-    log "off-site backup failed, abort update"
-    exit 1
-  fi
-fi
 
 # --- Real upgrade. ---
 SNAPSHOT="$BACKUP_DIR/pre-update-$STAMP"
