@@ -99,6 +99,11 @@ jobs:
           VERSION="${{ needs.sync.outputs.tag }}-custom-$(git rev-parse --short HEAD)"
           echo "$VERSION" > VERSION
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Ship the server update script inside the image so the server can
+          # fetch it with the registry login it already has. The official
+          # Dockerfile stays untouched; its last stage is the runtime image.
+          cp Dockerfile Dockerfile.custom
+          printf '\nCOPY deploy/nightly-update.sh /opt/deploy/nightly-update.sh\n' >> Dockerfile.custom
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -114,6 +119,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: Dockerfile.custom
           platforms: linux/amd64
           push: true
           tags: |
