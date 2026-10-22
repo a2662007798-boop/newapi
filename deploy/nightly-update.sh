@@ -1,27 +1,28 @@
 #!/usr/bin/env bash
 # Nightly backup + safe update for a Docker Compose deployment using SQLite.
 #
-# 1. Back up the live database online (sqlite3 .backup, no downtime), check
-#    its integrity, gzip it into <backup dir>/daily, keep KEEP_DAYS days.
+# 1. Pause the service for the few seconds a file copy takes, copy the SQLite
+#    files, resume. Fold the copy into one file, check its integrity, gzip it
+#    into <backup dir>/daily, keep KEEP_DAYS days.
 # 2. Pull the image configured for the new-api service. No new image: exit.
-# 3. Preflight: start the new image on a copy of that backup in an isolated
-#    container (no network). The production database is not touched; if the
-#    copy does not come up healthy, stop here.
+# 3. Preflight: start the new image on that copy in an isolated container
+#    (no network). The production database is not touched; if the copy does
+#    not come up healthy, stop here.
 # 4. Stop the service, copy the SQLite files aside, start on the new image.
 # 5. If /api/status does not report success in time, move the migrated files
 #    aside, put the copied database back, retag the previous image, start.
 #
 # Usage: nightly-update.sh [compose dir]   (default /opt/new-api)
 # Env:   SERVICE (default new-api), BACKUP_DIR (default <compose dir>/backups),
-#        KEEP_DAYS (default 7), HEALTH_TIMEOUT seconds (default 900)
+#        KEEP_DAYS (default 7), HEALTH_TIMEOUT seconds (default 1800)
 set -euo pipefail
 
 COMPOSE_DIR=${1:-/opt/new-api}
 SERVICE=${SERVICE:-new-api}
 BACKUP_DIR=${BACKUP_DIR:-$COMPOSE_DIR/backups}
 KEEP_DAYS=${KEEP_DAYS:-7}
-HEALTH_TIMEOUT=${HEALTH_TIMEOUT:-900}
-DB_FILES=(one-api.db one-api.db-wal one-api.db-shm)
+HEALTH_TIMEOUT=${HEALTH_TIMEOUT:-1800}
+DB_FILES=(one-api.db one-api.db-journal one-api.db-wal one-api.db-shm)
 PREFLIGHT=newapi-preflight
 STAMP=$(date '+%Y%m%d-%H%M%S')
 
@@ -80,34 +81,58 @@ NEW_IMAGE_ID=$(docker image inspect -f '{{.Id}}' "$IMAGE")
 
 # Unless the upgrade succeeds, point the compose image tag back at the running
 # version on exit, so a later manual `docker compose up` never starts an
-# image that was not verified.
+# image that was not verified. Never leave the service paused.
 UPGRADED=false
+PAUSED=false
 WORK=""
 cleanup() {
+  if [ "$PAUSED" = true ]; then docker compose unpause "$SERVICE" >/dev/null 2>&1 || true; fi
   docker rm -f "$PREFLIGHT" >/dev/null 2>&1 || true
   if [ -n "$WORK" ]; then rm -rf "$WORK"; fi
   if [ "$UPGRADED" != true ]; then docker tag "$OLD_IMAGE_ID" "$IMAGE" >/dev/null 2>&1 || true; fi
 }
 trap cleanup EXIT
+trap 'exit 1' INT TERM HUP
 
-# --- Nightly backup, every run, no downtime. ---
+if [ "$(docker inspect -f '{{.State.Paused}}' "$CID")" = true ]; then
+  log "$SERVICE was left paused (interrupted run?), resuming it"
+  docker compose unpause "$SERVICE"
+fi
+
+# --- Nightly backup. ---
+# An online `sqlite3 .backup` restarts whenever the app writes, and on a
+# rollback-journal database one long read makes the app's writes fail.
+# Pausing the container for the few seconds a file copy takes avoids both:
+# requests wait instead of failing, and the copy is crash-consistent.
 WORK=$(mktemp -d /var/tmp/newapi-preflight.XXXXXX)
+log "pausing $SERVICE to copy the database"
+paused_at=$SECONDS
+docker compose pause "$SERVICE"
+PAUSED=true
+for f in "${DB_FILES[@]}"; do
+  if [ -f "$DATA_DIR/$f" ]; then cp -p "$DATA_DIR/$f" "$WORK/"; fi
+done
+docker compose unpause "$SERVICE"
+PAUSED=false
+log "resumed $SERVICE after $((SECONDS - paused_at))s"
+
+# Fold any -journal/-wal into one self-contained file, then verify it.
+if nice sqlite3 "$WORK/one-api.db" "PRAGMA journal_mode=DELETE;" >/dev/null 2>&1; then
+  check=$(nice sqlite3 "$WORK/one-api.db" "PRAGMA quick_check;" 2>&1) || check="quick_check failed: $check"
+else
+  check="sqlite3 could not open the copy"
+fi
 mkdir -p "$BACKUP_DIR/daily"
-DAILY="$BACKUP_DIR/daily/one-api-$STAMP.db"
-log "backing up the live database to $DAILY.gz"
-sqlite3 "$DATA_DIR/one-api.db" ".backup '$DAILY'"
-check=$(sqlite3 "$DAILY" "PRAGMA quick_check;")
 if [ "$check" != "ok" ]; then
-  mv "$DAILY" "$DAILY.corrupt"
-  log "backup integrity check failed ($check), kept as $DAILY.corrupt; no update. check the live database"
+  mv "$WORK/one-api.db" "$BACKUP_DIR/daily/one-api-$STAMP.db.corrupt"
+  log "integrity check failed ($check), copy kept as $BACKUP_DIR/daily/one-api-$STAMP.db.corrupt; no update. check the live database"
   exit 1
 fi
-if [ "$OLD_IMAGE_ID" != "$NEW_IMAGE_ID" ]; then
-  cp "$DAILY" "$WORK/one-api.db"
-fi
-gzip -f "$DAILY"
+DAILY="$BACKUP_DIR/daily/one-api-$STAMP.db.gz"
+nice gzip -c "$WORK/one-api.db" > "$WORK/daily.gz"
+mv "$WORK/daily.gz" "$DAILY"
 find "$BACKUP_DIR/daily" -name 'one-api-*.db.gz' -mtime +"$((KEEP_DAYS - 1))" -delete
-log "backup ok ($(du -h "$DAILY.gz" | cut -f1))"
+log "backup ok: $DAILY ($(du -h "$DAILY" | cut -f1))"
 
 if [ "$OLD_IMAGE_ID" = "$NEW_IMAGE_ID" ]; then
   log "no new image, nothing to update"
