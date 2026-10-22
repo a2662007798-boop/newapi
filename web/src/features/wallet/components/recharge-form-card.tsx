@@ -217,7 +217,7 @@ export function RechargeFormCard({
       contentClassName='space-y-4 sm:space-y-6'
     >
       {/* Online Topup Section */}
-      {hasAnyTopup ? (
+      {hasAnyTopup && (
         <div className='space-y-4 sm:space-y-6'>
           {hasConfigurableTopup && (
             <>
@@ -487,14 +487,6 @@ export function RechargeFormCard({
             </>
           )}
         </div>
-      ) : (
-        <Alert>
-          <AlertDescription>
-            {t(
-              'Online topup is not enabled. Please use redemption code or contact administrator.'
-            )}
-          </AlertDescription>
-        </Alert>
       )}
 
       {/* Creem Products Section */}
@@ -515,7 +507,12 @@ export function RechargeFormCard({
 
       {/* Redemption Code Section */}
       {redemptionEnabled ? (
-        <div className='space-y-2.5 border-t pt-4 sm:space-y-3 sm:pt-6'>
+        <div
+          className={cn(
+            'space-y-2.5 sm:space-y-3',
+            hasAnyTopup && 'border-t pt-4 sm:pt-6'
+          )}
+        >
           <div className='flex items-center gap-2'>
             <IconBadge tone='warning' size='xs'>
               <Gift />
@@ -554,7 +551,7 @@ export function RechargeFormCard({
                 rel='noopener noreferrer'
                 className='inline-flex items-center gap-1 underline-offset-4 hover:underline'
               >
-                {t('Get one here')}
+                {t('Purchase a redemption code here')}
                 <ExternalLink className='h-3 w-3' />
               </a>
             </p>
