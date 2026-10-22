@@ -1,13 +1,14 @@
 name: Upstream release sync & image build
 
-# Checks the official repo every hour. When a new release tag appears, it is
-# merged into main here, then a private image is built and pushed to GHCR.
+# Runs every night at 01:17 Beijing time. When the official repo has a new
+# release tag, it is merged into main here, then a private image is built
+# and pushed to GHCR (the server updates from it at 03:40).
 # A merge conflict fails the run and GitHub emails the repo owner;
 # nothing is pushed or built in that case.
 
 on:
   schedule:
-    - cron: '17 * * * *'
+    - cron: '17 17 * * *'
   workflow_dispatch:
     inputs:
       force_build:

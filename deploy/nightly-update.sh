@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Safe update for a Docker Compose deployment using SQLite.
+# Nightly backup + safe update for a Docker Compose deployment using SQLite.
 #
-# 1. Pull the image configured for the new-api service. No new image: exit.
-# 2. Preflight: take an online copy of the database (sqlite3 .backup) and start
-#    the new image on that copy in an isolated container (no network). The
-#    production database is not touched; if the copy does not come up
-#    healthy, stop here.
-# 3. Run the existing off-site backup script (if present); abort on failure.
-# 4. Stop the service, copy the SQLite files aside, start on the new image.
-# 5. If /api/status does not report success in time, move the migrated files
+# 1. Back up the live database online (sqlite3 .backup, no downtime), check
+#    its integrity, gzip it into <backup dir>/daily, keep KEEP_DAYS days.
+# 2. Pull the image configured for the new-api service. No new image: exit.
+# 3. Preflight: start the new image on a copy of that backup in an isolated
+#    container (no network). The production database is not touched; if the
+#    copy does not come up healthy, stop here.
+# 4. Run the existing off-site backup script (if present); abort on failure.
+# 5. Stop the service, copy the SQLite files aside, start on the new image.
+# 6. If /api/status does not report success in time, move the migrated files
 #    aside, put the copied database back, retag the previous image, start.
 #
 # Usage: nightly-update.sh [compose dir]   (default /opt/new-api)
@@ -79,20 +80,47 @@ OLD_IMAGE_ID=$(docker inspect -f '{{.Image}}' "$CID")
 log "pulling $IMAGE"
 docker compose pull -q "$SERVICE"
 NEW_IMAGE_ID=$(docker image inspect -f '{{.Id}}' "$IMAGE")
+
+# Unless the upgrade succeeds, point the compose image tag back at the running
+# version on exit, so a later manual `docker compose up` never starts an
+# image that was not verified.
+UPGRADED=false
+WORK=""
+cleanup() {
+  docker rm -f "$PREFLIGHT" >/dev/null 2>&1 || true
+  if [ -n "$WORK" ]; then rm -rf "$WORK"; fi
+  if [ "$UPGRADED" != true ]; then docker tag "$OLD_IMAGE_ID" "$IMAGE" >/dev/null 2>&1 || true; fi
+}
+trap cleanup EXIT
+
+# --- Nightly backup, every run, no downtime. ---
+WORK=$(mktemp -d /var/tmp/newapi-preflight.XXXXXX)
+mkdir -p "$BACKUP_DIR/daily"
+DAILY="$BACKUP_DIR/daily/one-api-$STAMP.db"
+log "backing up the live database to $DAILY.gz"
+sqlite3 "$DATA_DIR/one-api.db" ".backup '$DAILY'"
+check=$(sqlite3 "$DAILY" "PRAGMA quick_check;")
+if [ "$check" != "ok" ]; then
+  mv "$DAILY" "$DAILY.corrupt"
+  log "backup integrity check failed ($check), kept as $DAILY.corrupt; no update. check the live database"
+  exit 1
+fi
+if [ "$OLD_IMAGE_ID" != "$NEW_IMAGE_ID" ]; then
+  cp "$DAILY" "$WORK/one-api.db"
+fi
+gzip -f "$DAILY"
+find "$BACKUP_DIR/daily" -name 'one-api-*.db.gz' -mtime +"$((KEEP_DAYS - 1))" -delete
+log "backup ok ($(du -h "$DAILY.gz" | cut -f1))"
+
 if [ "$OLD_IMAGE_ID" = "$NEW_IMAGE_ID" ]; then
-  log "no new image, nothing to do"
+  log "no new image, nothing to update"
   exit 0
 fi
 log "new image $NEW_IMAGE_ID (running $OLD_IMAGE_ID)"
 
 # --- Preflight on a copy; production keeps running and is not touched. ---
-WORK=$(mktemp -d /var/tmp/newapi-preflight.XXXXXX)
-trap 'docker rm -f "$PREFLIGHT" >/dev/null 2>&1 || true; rm -rf "$WORK"' EXIT
 docker rm -f "$PREFLIGHT" >/dev/null 2>&1 || true
-
-log "preflight: copying the live database to $WORK"
-sqlite3 "$DATA_DIR/one-api.db" ".backup '$WORK/one-api.db'"
-log "preflight: starting the new image on the copy (no network)"
+log "preflight: starting the new image on a copy of the database (no network)"
 started=$SECONDS
 docker run -d --name "$PREFLIGHT" --network none -e TZ=Asia/Shanghai -v "$WORK:/data" "$IMAGE" >/dev/null
 if ! wait_healthy docker exec "$PREFLIGHT"; then
@@ -122,6 +150,7 @@ for f in "${DB_FILES[@]}"; do
     cp -p "$DATA_DIR/$f" "$SNAPSHOT/"
     if [ "$(stat -c%s "$DATA_DIR/$f")" != "$(stat -c%s "$SNAPSHOT/$f")" ]; then
       log "copy of $f is incomplete, starting the old version again"
+      docker tag "$OLD_IMAGE_ID" "$IMAGE"
       docker compose up -d "$SERVICE"
       exit 1
     fi
@@ -132,6 +161,7 @@ echo "$OLD_IMAGE_ID" > "$SNAPSHOT/previous-image-id"
 
 docker compose up -d "$SERVICE"
 if wait_healthy docker compose exec -T "$SERVICE"; then
+  UPGRADED=true
   log "healthy on new image"
 else
   log "health check failed, restoring $SNAPSHOT and image $OLD_IMAGE_ID"
