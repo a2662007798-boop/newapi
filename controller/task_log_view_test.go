@@ -73,6 +73,28 @@ func TestTaskLogDTOSeparatesUserAdminAndRootDetails(t *testing.T) {
 	assert.Contains(t, string(rootJSON), "upstream-private")
 }
 
+func TestTaskLogDTOHidesUpstreamModelFromUsers(t *testing.T) {
+	task := &model.Task{
+		TaskID:   "task_mapped_model",
+		Platform: "jimeng",
+		Properties: model.Properties{
+			Input:             "a cat",
+			OriginModelName:   "video-requested",
+			UpstreamModelName: "video-upstream-private",
+		},
+	}
+
+	userJSON, err := common.Marshal(tasksToDto([]*model.Task{task}, false, common.RoleCommonUser)[0])
+	require.NoError(t, err)
+	assert.NotContains(t, string(userJSON), "video-upstream-private")
+	assert.Contains(t, string(userJSON), "video-requested")
+
+	// Built after the user view, so this also proves the stored task was not modified.
+	adminJSON, err := common.Marshal(tasksToDto([]*model.Task{task}, false, common.RoleAdminUser)[0])
+	require.NoError(t, err)
+	assert.Contains(t, string(adminJSON), "video-upstream-private")
+}
+
 func TestTaskLogDTODoesNotInventHistoricalPluginProvenance(t *testing.T) {
 	task := &model.Task{
 		TaskID:   "task_without_snapshot",

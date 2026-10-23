@@ -25,6 +25,16 @@ var legacySensitiveLogOtherKeys = []string{
 	"reject_reason",
 }
 
+// adminOnlyLogOtherKeys are public fields this deployment keeps from log
+// owners because they reveal which upstream model actually served the
+// request. They stay stored at the top level, so admin and root views (and
+// historical rows) are unchanged.
+var adminOnlyLogOtherKeys = []string{
+	"is_model_mapped",
+	"upstream_model_name",
+	"response_model",
+}
+
 type logOtherVisibility int
 
 const (
@@ -250,7 +260,7 @@ func formatLogOtherJSON(value string, visibility logOtherVisibility) string {
 				changed = true
 			}
 		}
-		for _, key := range legacySensitiveLogOtherKeys {
+		for _, key := range slices.Concat(legacySensitiveLogOtherKeys, adminOnlyLogOtherKeys) {
 			if _, exists := values[key]; exists {
 				delete(values, key)
 				changed = true

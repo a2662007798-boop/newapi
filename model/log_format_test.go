@@ -85,6 +85,47 @@ func TestTaskPluginLogVisibilityIsRoleSeparated(t *testing.T) {
 	})
 }
 
+// TestServedModelLogFieldsAreAdminOnly: which upstream model actually served
+// a request (model mapping and the model the upstream reported) is visible to
+// admins but stripped from the log owner's view, including historical rows.
+func TestServedModelLogFieldsAreAdminOnly(t *testing.T) {
+	other := common.MapToJsonStr(map[string]any{
+		"model_price":         1.5,
+		"is_model_mapped":     true,
+		"upstream_model_name": "claude-opus-5-5",
+		"response_model": map[string]any{
+			"requested_model": "claude-fable-5-1",
+			"upstream_model":  "claude-opus-5-5",
+			"returned_model":  "claude-opus-5-5",
+		},
+	})
+	servedModelKeys := []string{"is_model_mapped", "upstream_model_name", "response_model"}
+
+	t.Run("user", func(t *testing.T) {
+		logs := []*Log{{Other: other}}
+		formatUserLogs(logs, 0)
+
+		parsed, err := common.StrToMap(logs[0].Other)
+		require.NoError(t, err)
+		for _, key := range servedModelKeys {
+			assert.NotContains(t, parsed, key)
+		}
+		assert.NotContains(t, logs[0].Other, "claude-opus-5-5")
+		assert.Equal(t, 1.5, parsed["model_price"])
+	})
+
+	t.Run("admin", func(t *testing.T) {
+		logs := []*Log{{Other: other}}
+		FormatAdminLogs(logs)
+
+		parsed, err := common.StrToMap(logs[0].Other)
+		require.NoError(t, err)
+		for _, key := range servedModelKeys {
+			assert.Contains(t, parsed, key)
+		}
+	})
+}
+
 func TestLegacyLogOtherVisibilityIsRoleSeparated(t *testing.T) {
 	other := common.MapToJsonStr(map[string]any{
 		"request_path":  "/v1/chat/completions",
