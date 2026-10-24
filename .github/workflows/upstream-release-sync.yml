@@ -97,9 +97,12 @@ jobs:
       - name: Resolve version
         id: version
         run: |
-          VERSION="${{ needs.sync.outputs.tag }}-custom-$(git rev-parse --short HEAD)"
-          echo "$VERSION" > VERSION
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          # The app version uses semver build metadata so the admin update
+          # checker still compares it with official releases. Docker tags
+          # cannot contain "+", so the image tag uses "-custom-" instead.
+          echo "${{ needs.sync.outputs.tag }}+custom.$SHORT_SHA" > VERSION
+          echo "version=${{ needs.sync.outputs.tag }}-custom-$SHORT_SHA" >> "$GITHUB_OUTPUT"
           # Ship the server update script inside the image so the server can
           # fetch it with the registry login it already has. The official
           # Dockerfile stays untouched; its last stage is the runtime image.
