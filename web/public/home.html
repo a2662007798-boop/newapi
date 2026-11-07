@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<base target="_top" />
+<title>OpenOneApi · 所有大模型，一个入口</title>
+<style>
+  :root {
+    --bg: #000000;
+    --raise: #090909;
+    --silver: #dfe5f0;
+    --gold: #ffcf80;
+    --text: #f5f5f4;
+    --muted: #9b9b9b;
+    --faint: #5f5f5f;
+    --line: rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .2);
+    --edge: clamp(22px, 6vw, 96px);
+    --sans: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    --mono: "Cascadia Code", Consolas, "SF Mono", Menlo, monospace;
+    --ease-out: cubic-bezier(.16, 1, .3, 1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { font-family: var(--sans); font-size: 16px; line-height: 1.7; color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 4px; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 48px; padding: 0 26px;
+    font-family: var(--sans); font-size: 15px; font-weight: 600;
+    text-decoration: none; border-radius: 999px; cursor: pointer; border: 0;
+    transition: background-color .2s, box-shadow .2s;
+  }
+  .btn--solid { color: #0a0a0a; background: var(--text); }
+  .btn--solid:hover { background: #ffffff; box-shadow: 0 0 0 4px rgba(255, 207, 128, .18), 0 0 36px rgba(255, 207, 128, .35); }
+  .btn--ghost { color: var(--text); background: rgba(0, 0, 0, .35); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .btn--ghost:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .45); }
+
+
+  .hero { position: relative; height: 100vh; height: 100svh; min-height: 660px; max-height: 1040px; overflow: hidden; isolation: isolate; background: var(--bg); }
+  #floor { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .hero-copy { position: relative; z-index: 2; padding: clamp(120px, 18vh, 190px) var(--edge) 0; text-align: center; opacity: 0; animation: rise .9s var(--ease-out) .25s forwards; }
+  @keyframes rise { from { opacity: 0; transform: translate3d(0, 18px, 0); } to { opacity: 1; transform: none; } }
+  .hero h1 { font-size: clamp(44px, 6.6vw, 96px); font-weight: 700; line-height: 1.05; letter-spacing: -.035em; margin-bottom: 26px; }
+  .hero h1 span { display: block; }
+  .hero .sub { max-width: 34em; margin: 0 auto 36px; color: var(--muted); font-size: 17px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+  .hint { margin-top: 22px; font-size: 13px; color: var(--faint); }
+
+  .sec { padding: 136px var(--edge); }
+  .inner { max-width: 1120px; margin: 0 auto; }
+  .sec h2 { font-size: clamp(30px, 3.6vw, 46px); font-weight: 700; line-height: 1.2; letter-spacing: -.025em; margin-bottom: 16px; }
+  .lead { color: var(--muted); font-size: 17px; max-width: 34em; }
+  .split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 72px; align-items: start; }
+  .split .lead { margin-bottom: 32px; }
+  .ticks { list-style: none; display: grid; gap: 14px; color: var(--muted); font-size: 15px; }
+  .ticks li { display: grid; grid-template-columns: 14px 1fr; gap: 12px; }
+  .ticks li::before { content: ""; width: 6px; height: 6px; margin-top: 9px; background: var(--gold); box-shadow: 0 0 8px var(--gold); }
+  .ticks code { font-family: var(--mono); font-size: 14px; color: var(--text); word-break: break-all; }
+
+  .code { background: var(--raise); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .code-tabs { display: flex; align-items: center; gap: 4px; padding: 8px 10px 0; border-bottom: 1px solid var(--line); }
+  .tab { font-family: var(--sans); font-size: 14px; font-weight: 600; padding: 8px 14px 11px; border: 0; cursor: pointer; color: var(--faint); background: transparent; box-shadow: inset 0 -2px 0 transparent; }
+  .tab:hover { color: var(--muted); }
+  .tab[aria-selected="true"] { color: var(--text); box-shadow: inset 0 -2px 0 var(--gold); }
+  .copy { margin-left: auto; margin-bottom: 4px; font-family: var(--sans); font-size: 13px; font-weight: 600; padding: 4px 12px; border: 0; border-radius: 999px; cursor: pointer; color: var(--muted); background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+  .copy:hover { color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .code pre { padding: 20px 0 22px; font-family: var(--mono); font-size: 13.5px; line-height: 1.9; color: #cfcfcf; overflow-x: auto; }
+  .ln { display: block; padding-right: 22px; white-space: pre; }
+  .ln .sign { display: inline-block; width: 38px; text-align: center; color: var(--faint); user-select: none; }
+  .ln--del { background: rgba(255, 110, 110, .07); color: #b98282; }
+  .ln--del .sign { color: #c97474; }
+  .ln--add { background: rgba(255, 207, 128, .08); color: #ffe2b0; }
+  .ln--add .sign { color: var(--gold); }
+  .model-name { color: var(--gold); border-radius: 3px; transition: background-color .5s; }
+  .model-name.flash { background: rgba(255, 207, 128, .28); transition: none; }
+  .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 14px 22px 18px; border-top: 1px solid var(--line); font-size: 13px; color: var(--faint); }
+  .chip { font-family: var(--sans); font-size: 13px; font-weight: 600; padding: 5px 12px; border: 0; border-radius: 999px; cursor: pointer; color: var(--muted); background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .chip:hover { color: var(--text); }
+  .chip[aria-pressed="true"] { color: #0a0a0a; background: var(--gold); box-shadow: none; }
+  .panel[hidden] { display: none; }
+
+  .route { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 72px; align-items: center; margin-top: 56px; }
+  .console-bar { display: flex; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--faint); }
+  .console-bar span:last-child { font-family: var(--mono); }
+  .log { list-style: none; padding: 18px 20px 22px; min-height: 306px; font-family: var(--mono); font-size: 13.5px; line-height: 1.95; color: #8f8f8f; }
+  .log li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log .hi { color: var(--text); }
+  .log .bad { color: #d98d80; }
+  .log .gold { color: var(--gold); }
+  .points { list-style: none; display: grid; gap: 30px; }
+  .points h3 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+  .points p { color: var(--muted); font-size: 15px; }
+
+  .facts { list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 40px; margin-top: 56px; }
+  .facts li { padding-top: 22px; border-top: 1px solid var(--line-strong); }
+  .facts h3 { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
+  .facts p { color: var(--muted); font-size: 15px; }
+
+  .final { position: relative; overflow: hidden; padding: 170px var(--edge) 64px; text-align: center; }
+  .final::before { content: ""; position: absolute; left: 50%; top: 0; width: min(1100px, 120%); height: 340px; transform: translate(-50%, -50%); background: radial-gradient(ellipse 50% 22% at 50% 50%, rgba(255, 207, 128, .32), rgba(255, 170, 90, .08) 45%, transparent 72%); pointer-events: none; }
+  .final::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 207, 128, .55) 50%, transparent); }
+  .final h2 { position: relative; font-size: clamp(34px, 4.8vw, 60px); font-weight: 700; letter-spacing: -.03em; line-height: 1.15; margin-bottom: 14px; }
+  .final p { position: relative; color: var(--muted); margin-bottom: 36px; }
+  .final .actions { position: relative; }
+  .foot { position: relative; margin-top: 130px; font-size: 13px; color: var(--faint); }
+
+  @media (max-width: 980px) {
+    .split, .route { grid-template-columns: 1fr; gap: 44px; }
+    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    .facts { grid-template-columns: 1fr; gap: 28px; }
+    .sec { padding: 100px var(--edge); }
+    .hint { display: none; }
+    .code pre { font-size: 12px; }
+    .ln .sign { width: 28px; }
+    .log { font-size: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .hero-copy { opacity: 1; animation: none; }
+    .btn, .model-name { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <canvas id="floor" aria-hidden="true"></canvas>
+  <div class="hero-copy" id="hero-copy">
+    <h1><span>所有大模型，</span><span>一个入口。</span></h1>
+    <p class="sub">Claude、GPT、Gemini、DeepSeek、通义千问，用同一个密钥调用。兼容 OpenAI 和 Claude 两种接口，Claude Code 改个地址就能用。</p>
+    <div class="actions">
+      <a class="btn btn--solid" href="/console">免费开始使用</a>
+      <a class="btn btn--ghost" href="/pricing">查看模型和价格</a>
+    </div>
+    <p class="hint">移动鼠标照亮地面，点击地面发出一次请求</p>
+  </div>
+</header>
+
+<section class="sec" aria-labelledby="swap-title">
+  <div class="inner split">
+    <div>
+      <h2 id="swap-title">地址换一下，代码不用动。</h2>
+      <p class="lead">OpenOneApi 兼容 OpenAI 和 Claude 的接口格式。已有项目把请求地址和密钥换成我们的，就能继续跑。</p>
+      <ul class="ticks">
+        <li><span>OpenAI 格式：<code>https://openoneapi.com/v1</code></span></li>
+        <li><span>Claude 格式：<code>https://openoneapi.com</code></span></li>
+        <li><span>密钥在控制台的「令牌」里创建，可以限制额度、有效期和可用模型。</span></li>
+      </ul>
+    </div>
+    <div class="code">
+      <div class="code-tabs" role="tablist" aria-label="接入示例">
+        <button class="tab" role="tab" type="button" id="tab-cc" aria-controls="panel-cc" aria-selected="true">Claude Code</button>
+        <button class="tab" role="tab" type="button" id="tab-py" aria-controls="panel-py" aria-selected="false" tabindex="-1">OpenAI SDK</button>
+        <button class="copy" type="button" id="copy">复制</button>
+      </div>
+      <div class="panel" role="tabpanel" id="panel-cc" aria-labelledby="tab-cc"><pre data-snippet="cc"></pre></div>
+      <div class="panel" role="tabpanel" id="panel-py" aria-labelledby="tab-py" hidden>
+        <pre data-snippet="py"></pre>
+        <div class="chips" role="group" aria-label="切换模型">
+          换模型只改 model：
+          <button class="chip" type="button" data-model="claude-sonnet-5-5" aria-pressed="true">Claude Sonnet</button>
+          <button class="chip" type="button" data-model="claude-opus-5-5" aria-pressed="false">Claude Opus</button>
+          <button class="chip" type="button" data-model="deepseek-chat" aria-pressed="false">DeepSeek</button>
+          <button class="chip" type="button" data-model="qwen-max" aria-pressed="false">通义千问</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="route-title">
+  <div class="inner">
+    <h2 id="route-title">线路出问题，自动换一条。</h2>
+    <p class="lead">同一个模型背后接了多条线路。某条超时或报错，请求会自动重试到别的线路，你的程序拿到的是正常结果。</p>
+    <div class="route">
+      <div class="code" role="img" aria-label="请求转发示意：一条线路超时后自动切换到另一条线路并成功返回">
+        <div class="console-bar"><span>请求转发示意</span><span id="clock">--:--:--</span></div>
+        <ol class="log" id="log"></ol>
+      </div>
+      <ul class="points">
+        <li><h3>按模型分组调度</h3><p>每个模型有多条可用线路，按可用性和权重分配请求。</p></li>
+        <li><h3>失败自动重试</h3><p>超时、限流、上游报错时换线路重试，不用自己写重试逻辑。</p></li>
+        <li><h3>每次调用都有记录</h3><p>用了哪个模型、多少 token、花了多少钱，控制台里都能查到。</p></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="why-title">
+  <div class="inner">
+    <h2 id="why-title">一个账号，一份账单。</h2>
+    <p class="lead">不用分别去各家注册、绑卡、管理密钥。</p>
+    <ul class="facts">
+      <li><h3>按量计费</h3><p>按实际消耗的 token 扣费，没有月费，充多少用多少。</p></li>
+      <li><h3>一个密钥管所有模型</h3><p>换模型只改请求里的模型名，不用换密钥、不用改代码。</p></li>
+      <li><h3>密钥可以细分</h3><p>给不同项目建不同密钥，各自限制额度和可用模型，用完就关掉。</p></li>
+      <li><h3>用量看得清楚</h3><p>每次调用的模型、token 数和费用都有明细，按天按模型统计。</p></li>
+    </ul>
+  </div>
+</section>
+
+<section class="final" aria-labelledby="go-title">
+  <h2 id="go-title">准备好了就开始</h2>
+  <p>注册后在控制台创建密钥，几分钟就能发出第一个请求。</p>
+  <div class="actions"><a class="btn btn--solid" href="/console">免费开始使用</a></div>
+  <p class="foot">© OpenOneApi</p>
+</section>
+<script>
+/*
+ * Perspective dot-matrix floor. The dot field (value-noise nebula, per-dot
+ * beats, two tones, flash-in reveal) is adapted from
+ * router-for-me/Cli-Proxy-API-Management-Center, src/pages/login/dotMatrixField.ts
+ * (MIT License, Copyright (c) 2026 Router-For.ME). Here it is projected onto a
+ * ground plane that converges on a horizon light, with request pulses
+ * travelling up model lanes.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions: The above copyright
+ * notice and this permission notice shall be included in all copies or
+ * substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS",
+ * WITHOUT WARRANTY OF ANY KIND.
+ */
+(() => {
+  const hero = document.querySelector('.hero');
+  const copyEl = document.getElementById('hero-copy');
+  const canvas = document.getElementById('floor');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const SILVER = '#dfe5f0';
+  const GOLD = '#ffcf80';
+  const TONE_DIM = 0.22, TONE_MID = 0.5;
+  const DRIFT = 2.4;
+  const FIELD_CONTRAST = 2.2, DENSITY_LOW = 0.38, DENSITY_HIGH = 0.9, DENSITY_MAX = 0.82, SCATTER = 0.035;
+  const MID_THRESHOLD = 0.78, MID_CHANCE = 0.3, PERIOD_MIN = 1.2, PERIOD_MAX = 3.2;
+  const INTRO = 1.3, JITTER = 0.12, FLASH_RISE = 0.05, FLASH_SETTLE = 0.33, FLASH_BOOST = 0.45;
+
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const smoothstep = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const easeOutCubic = (t) => 1 - (1 - t) ** 3;
+  const hash2 = (ix, iy, seed) => {
+    let h = Math.imul(ix, 0x27d4eb2d) ^ Math.imul(iy, 0x165667b1) ^ Math.imul(seed, 0x9e3779b1);
+    h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+    h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+  // Lattice tables make value noise a few array reads per sample.
+  const TS = 256, MASK = 255;
+  const table = (seed) => {
+    const t = new Float32Array(TS * TS);
+    for (let y = 0; y < TS; y += 1) for (let x = 0; x < TS; x += 1) t[y * TS + x] = hash2(x, y, seed);
+    return t;
+  };
+  const T0 = table(0x0b17), T1 = table(0x0b18), T2 = table(0x0b19);
+  const vnoise = (t, x, y) => {
+    const ix = Math.floor(x), iy = Math.floor(y);
+    const fx = x - ix, fy = y - iy;
+    const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+    const x0 = ix & MASK, x1 = (ix + 1) & MASK, y0 = (iy & MASK) * TS, y1 = ((iy + 1) & MASK) * TS;
+    const a = t[y0 + x0], b = t[y0 + x1], c = t[y1 + x0], d = t[y1 + x1];
+    const top = a + (b - a) * sx, bot = c + (d - c) * sx;
+    return top + (bot - top) * sy;
+  };
+  // Sampling further away over time makes the nebula roll toward the viewer.
+  const field = (col, row, time) => {
+    const z = row + DRIFT * time;
+    const primary = vnoise(T0, col / 11, z / 11) * 0.62 + vnoise(T1, col / 5, z / 5) * 0.38;
+    const secondary = vnoise(T2, col / 7 + time * 0.6, z / 7 - time * 0.8);
+    return clamp((primary * 0.62 + secondary * 0.38 - 0.5) * FIELD_CONTRAST + 0.5, 0, 1);
+  };
+  const applyReveal = (alpha, revealAt, elapsed) => {
+    const local = elapsed - revealAt;
+    if (local <= 0 || alpha <= 0) return 0;
+    const peak = Math.min(1, alpha + FLASH_BOOST);
+    if (local < FLASH_RISE) return peak * (local / FLASH_RISE);
+    const settle = (local - FLASH_RISE) / FLASH_SETTLE;
+    if (settle >= 1) return alpha;
+    return peak + (alpha - peak) * easeOutCubic(settle);
+  };
+
+  let W = 0, H = 0, horizon = 0, f = 1, camH = 1, z0 = 1, zMax = 2;
+  let N = 0, Xs, Zs, period, phase, reveal, fog, epoch, roll, tone;
+  let lanes = [], labelZ = 1, introDuration = 0;
+  let vx = 0, hy = 0;
+  const mouse = { x: -1e4, y: -1e4, inside: false };
+  let pulses = [], ripples = [], coreFlash = 0, nextPulse = 0.4;
+  let running = false, visible = true, clock = 0, lastNow = null;
+
+  const stepFor = (Z) => { const hp = f / Z; return hp >= 6.5 ? 1 : hp >= 3.4 ? 2 : hp >= 1.8 ? 4 : 8; };
+
+  function build() {
+    const rect = hero.getBoundingClientRect();
+    W = rect.width; H = rect.height;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const mobile = W < 720;
+    const copyBottom = copyEl.getBoundingClientRect().bottom - rect.top;
+    horizon = Math.min(H - 150, Math.max(H * 0.56, copyBottom + 56));
+    const band = H - horizon;
+    const pitch = mobile ? 15 : 19;
+    const k = 0.72; // near-row vertical / horizontal spacing
+    f = band / k;
+    z0 = f / pitch;
+    camH = band * z0 / f;
+    zMax = f / 1.15;
+
+    const xs = [], zs = [];
+    for (let Z = Math.ceil(z0); Z <= zMax; Z += 1) {
+      const step = stepFor(Z);
+      if (Z % step !== 0) continue;
+      const xMax = Math.ceil(((W / 2 + 90) / f) * Z / step) * step;
+      for (let X = -xMax; X <= xMax; X += step) { xs.push(X); zs.push(Z); }
+    }
+    N = xs.length;
+    Xs = Int32Array.from(xs); Zs = Int32Array.from(zs);
+    period = new Float32Array(N); phase = new Float32Array(N); reveal = new Float32Array(N); fog = new Float32Array(N);
+    epoch = new Int32Array(N).fill(-1); roll = new Float32Array(N); tone = new Float32Array(N);
+    introDuration = 0;
+    for (let i = 0; i < N; i += 1) {
+      const X = Xs[i], Z = Zs[i];
+      const below = (camH * f) / Z; // screen px under the horizon
+      period[i] = PERIOD_MIN + (PERIOD_MAX - PERIOD_MIN) * hash2(X, Z, 17);
+      phase[i] = hash2(X, Z, 19);
+      // The reveal wave rolls from the horizon toward the viewer, evenly on screen.
+      reveal[i] = INTRO * Math.pow(below / band, 0.8) + JITTER * hash2(X, Z, 13);
+      fog[i] = 0.12 + 0.88 * smoothstep(3, 120, below);
+      introDuration = Math.max(introDuration, reveal[i] + FLASH_RISE + FLASH_SETTLE);
+    }
+    const names = mobile ? ['Claude', 'GPT', 'DeepSeek'] : ['Claude', 'GPT', 'Gemini', 'DeepSeek', '通义千问'];
+    const xsLane = mobile ? [-8, 0, 8] : [-32, -16, 0, 16, 32];
+    lanes = names.map((name, i) => ({ name, x: xsLane[i], glow: 0 }));
+    labelZ = (camH * f) / Math.max(20, band - 40);
+    vx = W / 2; hy = horizon;
+    pulses = []; ripples = [];
+  }
+
+  function launch(x, z) {
+    pulses.push({ x, z: Math.max(z, z0) });
+    const lane = lanes.find((l) => l.x === x);
+    if (lane) lane.glow = 1;
+  }
+
+  function paint(time, dt) {
+    const ease = 1 - Math.pow(0.9, dt * 60);
+    const tvx = W / 2 + (mouse.inside ? (0.5 - mouse.x / W) * W * 0.05 : 0);
+    const thy = horizon + (mouse.inside ? (0.5 - mouse.y / H) * 10 : 0);
+    vx += (tvx - vx) * ease; hy += (thy - hy) * ease;
+
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.clearRect(0, 0, W, H);
+
+    // horizon light
+    const appear = reduced ? 1 : smoothstep(0, 0.7, time);
+    coreFlash *= Math.pow(0.93, dt * 60);
+    const I = appear * (0.62 + 0.38 * coreFlash);
+    const R = Math.max(W * 0.46, 420);
+    ctx.save();
+    ctx.translate(vx, hy); ctx.scale(1, 0.2);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, R);
+    g.addColorStop(0, `rgba(255, 222, 160, ${0.55 * I})`);
+    g.addColorStop(0.16, `rgba(255, 196, 120, ${0.22 * I})`);
+    g.addColorStop(0.5, `rgba(255, 170, 90, ${0.06 * I})`);
+    g.addColorStop(1, 'rgba(255, 170, 90, 0)');
+    ctx.fillStyle = g; ctx.fillRect(-R, -R, R * 2, R * 2);
+    ctx.restore();
+    const lg = ctx.createLinearGradient(0, 0, W, 0);
+    const c = clamp(vx / W, 0.05, 0.95);
+    lg.addColorStop(0, 'rgba(255, 207, 128, 0)');
+    lg.addColorStop(c, `rgba(255, 226, 176, ${0.7 * I})`);
+    lg.addColorStop(1, 'rgba(255, 207, 128, 0)');
+    ctx.fillStyle = lg; ctx.fillRect(0, hy - 0.5, W, 1);
+
+    // floor dots
+    const intro = !reduced && time < introDuration;
+    const spot = mouse.inside && mouse.y > hy;
+    const SR = W < 720 ? 110 : 170, SR2 = SR * SR;
+    ripples = ripples.filter((r) => time - r.t0 < 1.9);
+    ctx.fillStyle = SILVER;
+    for (let i = 0; i < N; i += 1) {
+      const X = Xs[i], Z = Zs[i];
+      const inv = 1 / Z;
+      const sx = vx + X * f * inv;
+      if (sx < -12 || sx > W + 12) continue;
+      const sy = hy + camH * f * inv;
+      const ep = Math.floor(time / period[i] + phase[i]);
+      if (ep !== epoch[i]) { epoch[i] = ep; roll[i] = hash2(X * 131 + ep, Z, 23); tone[i] = hash2(X * 131 + ep, Z, 29); }
+      const fv = field(X, Z, time);
+      let a = 0;
+      if (roll[i] < SCATTER + DENSITY_MAX * smoothstep(DENSITY_LOW, DENSITY_HIGH, fv)) {
+        a = fv > MID_THRESHOLD && tone[i] < MID_CHANCE ? TONE_MID : TONE_DIM;
+      }
+      if (spot) {
+        const dx = sx - mouse.x, dy = (sy - mouse.y) * 1.5, d2 = dx * dx + dy * dy;
+        if (d2 < SR2) { const s = 1 - Math.sqrt(d2) / SR; a = Math.max(a, 0.2 * s) + 0.35 * s * s; }
+      }
+      for (const r of ripples) {
+        const age = time - r.t0, ring = age * 16, dw = Math.hypot(X - r.x, (Z - r.z) * 0.9);
+        const width = 1.6 + ring * 0.05;
+        const d = Math.abs(dw - ring);
+        if (d < width) a += (1 - d / width) * 0.85 * (1 - age / 1.9);
+      }
+      a *= fog[i];
+      if (intro) a = applyReveal(a, reveal[i], time);
+      if (a < 0.012) continue;
+      const hp = f * inv, vp = camH * f * inv * inv;
+      const w = hp * 0.56, hh = Math.max(1, Math.min(w, vp * 0.6));
+      ctx.globalAlpha = a > 1 ? 1 : a;
+      ctx.fillRect(sx - w / 2, sy - hh / 2, w, hh);
+    }
+
+    // request pulses travelling up the lanes
+    if (!reduced && time > introDuration * 0.7) {
+      nextPulse -= dt;
+      if (nextPulse <= 0) {
+        const lane = lanes[(Math.random() * lanes.length) | 0];
+        launch(lane.x, z0 + Math.random() * 2);
+        nextPulse = 0.55 + Math.random() * 1.1;
+      }
+    }
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = GOLD;
+    pulses = pulses.filter((p) => {
+      p.z *= 1 + 0.8 * dt;
+      if (p.z >= zMax * 0.97) { coreFlash = Math.min(1, coreFlash + 0.55); return false; }
+      const tail = p.z * 0.42;
+      for (let Z = Math.floor(p.z); Z >= Math.max(Math.ceil(z0), p.z - tail); Z -= 1) {
+        const step = stepFor(Z);
+        if (Z % step !== 0 || p.x % step !== 0) continue;
+        const inv = 1 / Z;
+        const k = 1 - (p.z - Z) / tail;
+        const sx = vx + p.x * f * inv, sy = hy + camH * f * inv;
+        const hp = f * inv, vp = camH * f * inv * inv;
+        const w = hp * 0.62, hh = Math.max(1.2, Math.min(w, vp * 0.66));
+        const fade = smoothstep(3, 120, sy - hy);
+        ctx.globalAlpha = k * fade;
+        ctx.fillRect(sx - w / 2, sy - hh / 2, w, hh);
+        if (k > 0.92) {
+          ctx.globalAlpha = 0.18 * fade;
+          ctx.fillRect(sx - w * 1.6, sy - hh * 1.6, w * 3.2, hh * 3.2);
+        }
+      }
+      return true;
+    });
+
+    // lane labels
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.font = `600 ${W < 720 ? 12 : 13}px "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const ly = hy + camH * f / labelZ;
+    for (const lane of lanes) {
+      lane.glow *= Math.pow(0.95, dt * 60);
+      const lx = vx + lane.x * f / labelZ;
+      const tw = ctx.measureText(lane.name).width + 20;
+      ctx.globalAlpha = 0.78 * appear;
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(lx - tw / 2, ly - 12, tw, 24, 12); else ctx.rect(lx - tw / 2, ly - 12, tw, 24);
+      ctx.fill();
+      ctx.globalAlpha = (0.25 + 0.75 * lane.glow) * appear;
+      ctx.strokeStyle = GOLD; ctx.lineWidth = 1; ctx.stroke();
+      ctx.globalAlpha = (0.62 + 0.38 * lane.glow) * appear;
+      ctx.fillStyle = lane.glow > 0.15 ? GOLD : SILVER;
+      ctx.fillText(lane.name, lx, ly + 0.5);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function loop(now) {
+    if (!running) return;
+    const dt = lastNow === null ? 0 : Math.min(0.05, (now - lastNow) / 1000);
+    lastNow = now;
+    clock += dt;
+    paint(clock, dt);
+    requestAnimationFrame(loop);
+  }
+  const start = () => {
+    if (reduced || running || !visible || document.hidden) return;
+    running = true; lastNow = null;
+    requestAnimationFrame(loop);
+  };
+  const stop = () => { running = false; };
+
+  hero.addEventListener('pointermove', (e) => {
+    const r = hero.getBoundingClientRect();
+    mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; mouse.inside = true;
+  });
+  hero.addEventListener('pointerleave', () => { mouse.inside = false; });
+  hero.addEventListener('pointerdown', (e) => {
+    if (reduced || e.target.closest('a, button')) return;
+    const r = hero.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    if (y < hy + 10) return;
+    const Z = (camH * f) / (y - hy);
+    const X = ((x - vx) * Z) / f;
+    ripples.push({ x: X, z: Z, t0: clock });
+    if (ripples.length > 4) ripples.shift();
+    launch(Math.round(X / 8) * 8, Z);
+  });
+
+  new IntersectionObserver(([entry]) => {
+    visible = entry.isIntersecting;
+    visible ? start() : stop();
+  }).observe(hero);
+  document.addEventListener('visibilitychange', () => (document.hidden ? stop() : start()));
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { build(); if (reduced) paint(4, 0); }, 150);
+  });
+
+  build();
+  if (reduced) paint(4, 0); else start();
+})();
+</script>
+<script>
+/* code snippets: before/after diff, model switcher, copy */
+(() => {
+  const SNIPPETS = {
+    cc: [
+      ['-', 'export ANTHROPIC_BASE_URL=https://api.anthropic.com'],
+      ['+', 'export ANTHROPIC_BASE_URL=https://openoneapi.com'],
+      ['-', 'export ANTHROPIC_AUTH_TOKEN=sk-ant-xxxxxxxx'],
+      ['+', 'export ANTHROPIC_AUTH_TOKEN=sk-你的密钥'],
+      [' ', 'claude'],
+    ],
+    py: [
+      [' ', 'from openai import OpenAI'],
+      [' ', ''],
+      [' ', 'client = OpenAI('],
+      ['-', '    base_url="https://api.openai.com/v1",'],
+      ['+', '    base_url="https://openoneapi.com/v1",'],
+      ['-', '    api_key="sk-proj-xxxxxxxx",'],
+      ['+', '    api_key="sk-你的密钥",'],
+      [' ', ')'],
+      [' ', 'reply = client.chat.completions.create('],
+      [' ', '    model="{model}",'],
+      [' ', '    messages=[{"role": "user", "content": "你好"}],'],
+      [' ', ')'],
+      [' ', 'print(reply.choices[0].message.content)'],
+    ],
+  };
+  const KIND = { '-': 'del', '+': 'add', ' ': 'ctx' };
+  let model = 'claude-sonnet-5-5';
+
+  function render(key) {
+    const pre = document.querySelector(`pre[data-snippet="${key}"]`);
+    pre.replaceChildren();
+    for (const [sign, text] of SNIPPETS[key]) {
+      const line = document.createElement('span');
+      line.className = `ln ln--${KIND[sign]}`;
+      const mark = document.createElement('span');
+      mark.className = 'sign';
+      mark.textContent = sign === ' ' ? '' : sign;
+      line.append(mark);
+      const at = text.indexOf('{model}');
+      if (at < 0) {
+        line.append(text);
+      } else {
+        const name = document.createElement('span');
+        name.className = 'model-name';
+        name.textContent = model;
+        line.append(text.slice(0, at), name, text.slice(at + 7));
+      }
+      pre.append(line);
+    }
+  }
+  render('cc'); render('py');
+
+  const tabs = [...document.querySelectorAll('.tab')];
+  let active = 'cc';
+  const select = (tab) => {
+    tabs.forEach((t) => {
+      const on = t === tab;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    active = tab.id === 'tab-py' ? 'py' : 'cc';
+  };
+  tabs.forEach((tab, i) => {
+    tab.addEventListener('click', () => select(tab));
+    tab.addEventListener('keydown', (e) => {
+      const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      if (!step) return;
+      const next = tabs[(i + step + tabs.length) % tabs.length];
+      select(next); next.focus();
+    });
+  });
+
+  document.querySelectorAll('.chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      model = chip.dataset.model;
+      document.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', String(c === chip)));
+      render('py');
+      const name = document.querySelector('.model-name');
+      name.classList.add('flash');
+      requestAnimationFrame(() => requestAnimationFrame(() => name.classList.remove('flash')));
+    });
+  });
+
+  const copy = document.getElementById('copy');
+  copy.addEventListener('click', async () => {
+    const text = SNIPPETS[active]
+      .filter(([sign]) => sign !== '-')
+      .map(([, line]) => line.replace('{model}', model))
+      .join('\n');
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch {
+      const area = document.createElement('textarea');
+      area.value = text; area.setAttribute('readonly', ''); area.style.position = 'fixed'; area.style.opacity = '0';
+      document.body.appendChild(area); area.select();
+      try { ok = document.execCommand('copy'); } catch { ok = false; }
+      area.remove();
+    }
+    copy.textContent = ok ? '已复制' : '复制失败，请手动选择';
+    setTimeout(() => { copy.textContent = '复制'; }, 1600);
+  });
+})();
+
+/* failover log (illustrative, not live data) */
+(() => {
+  const SCRIPT = [
+    ['<span class="hi">POST</span> /v1/messages  model=claude-sonnet-5-5', ''],
+    ['  → 线路 A ……… <span class="bad">超时 30s</span>', ''],
+    ['  → <span class="gold">自动切换</span> 线路 B ……… <span class="hi">200 OK</span>', ''],
+    ['  ✓ 返回给你的程序：正常结果', 'hi'],
+    ['<span class="hi">POST</span> /v1/chat/completions  model=deepseek-chat', ''],
+    ['  → 线路 C ……… <span class="hi">200 OK</span>', ''],
+    ['<span class="hi">POST</span> /v1/chat/completions  model=qwen-max', ''],
+    ['  → 线路 D ……… <span class="bad">429 限流</span>', ''],
+    ['  → <span class="gold">自动切换</span> 线路 E ……… <span class="hi">200 OK</span>', ''],
+    ['  ✓ 返回给你的程序：正常结果', 'hi'],
+  ];
+  const logEl = document.getElementById('log');
+  let line = 0;
+  const pushLine = () => {
+    const [html, cls] = SCRIPT[line % SCRIPT.length];
+    const li = document.createElement('li');
+    li.innerHTML = html;
+    if (cls) li.className = cls;
+    logEl.appendChild(li);
+    while (logEl.children.length > 10) logEl.firstChild.remove();
+    line += 1;
+  };
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) SCRIPT.forEach(pushLine);
+  else { pushLine(); setInterval(pushLine, 900); }
+  const clock = document.getElementById('clock');
+  setInterval(() => { clock.textContent = new Date().toTimeString().slice(0, 8); }, 1000);
+})();
+</script>
+</body>
+</html>
