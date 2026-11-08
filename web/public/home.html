@@ -355,6 +355,8 @@
   }
 
   function paint(time, dt) {
+    // An out-of-process iframe can run this before it gets its size.
+    if (!W || !H) return;
     const ease = 1 - Math.pow(0.9, dt * 60);
     const tvx = W / 2 + (mouse.inside ? (0.5 - mouse.x / W) * W * 0.05 : 0);
     const thy = horizon + (mouse.inside ? (0.5 - mouse.y / H) * 10 : 0);
@@ -517,11 +519,13 @@
     visible ? start() : stop();
   }).observe(hero);
   document.addEventListener('visibilitychange', () => (document.hidden ? stop() : start()));
+  // Observing the hero (not window resize) also catches the first size an
+  // embedding iframe receives after this script has run.
   let resizeTimer;
-  window.addEventListener('resize', () => {
+  new ResizeObserver(() => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { build(); if (reduced) paint(4, 0); }, 150);
-  });
+    resizeTimer = setTimeout(() => { build(); if (reduced) paint(4, 0); }, W ? 150 : 0);
+  }).observe(hero);
 
   build();
   if (reduced) paint(4, 0); else start();
